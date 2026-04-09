@@ -58,10 +58,10 @@ sudo cp fuse-overlayfs /usr/bin/
 
 6. Compiling on termux:
 
-Needed: git, make, llvm, clang, libfuse2, libfuse3, build-essential
+Needed: git, make, llvm, clang, libfuse2, libfuse3, build-essential, autoconf, automake, m4 
 
 ```
-apt install git make llvm clang libfuse2 libfuse3 build-essential
+apt install git make llvm clang libfuse2 libfuse3 build-essential autoconf automake m4 
 ```
 
 Clone the repo and build:
