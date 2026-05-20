@@ -25,7 +25,7 @@ use fuser::{
     ReplyDirectoryPlus, ReplyEmpty, ReplyEntry, ReplyIoctl, ReplyLseek, ReplyOpen, ReplyStatfs,
     ReplyWrite, ReplyXattr, Request, TimeOrNow,
 };
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 
 /// Convert a string to CString, returning EINVAL on failure (interior null byte).
 /// Use in FUSE handlers where panicking is not acceptable.
@@ -2395,7 +2395,7 @@ impl Filesystem for OverlayFs {
             let (sid, did) = match (src_child, dst_child) {
                 (Some(s), Some(d)) => (s, d),
                 _ => {
-                    log::error!(
+                    error!(
                         "RENAME_EXCHANGE: in-memory children missing after successful renameat2"
                     );
                     reply.error(Errno::EIO);

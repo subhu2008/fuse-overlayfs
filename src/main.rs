@@ -18,11 +18,20 @@ mod sys;
 mod whiteout;
 mod xattr;
 
-use log::info;
+use log::{debug, error, info, warn};
 use std::os::fd::{AsRawFd, OwnedFd};
 
 fn main() {
-    // Support FUSE_OVERLAYFS_DEBUG_LOG=/path/to/file for logging in daemon mode
+    let args: Vec<String> = std::env::args().collect();
+    let config = match config::parse_args(&args) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("fuse-overlayfs: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Initialize logger after config parsing so --debug can set the level.
     if let Ok(log_path) = std::env::var("FUSE_OVERLAYFS_DEBUG_LOG") {
         let file = std::fs::OpenOptions::new()
             .create(true)
@@ -34,23 +43,26 @@ fn main() {
             .target(env_logger::Target::Pipe(Box::new(file)))
             .init();
     } else {
-        env_logger::init();
+        let default_level = if config.debug {
+            log::LevelFilter::Debug
+        } else {
+            log::LevelFilter::Warn
+        };
+        env_logger::Builder::new()
+            .filter_level(default_level)
+            .parse_default_env()
+            .format(|buf, record| {
+                use std::io::Write;
+                writeln!(buf, "fuse-overlayfs: {}", record.args())
+            })
+            .init();
     }
-
-    let args: Vec<String> = std::env::args().collect();
-    let config = match config::parse_args(&args) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("fuse-overlayfs: {}", e);
-            std::process::exit(1);
-        }
-    };
 
     // Validate required options
     let lowerdir = match &config.lowerdir {
         Some(l) => l.clone(),
         None => {
-            eprintln!("fuse-overlayfs: no lowerdir specified");
+            error!("no lowerdir specified");
             std::process::exit(1);
         }
     };
@@ -58,13 +70,13 @@ fn main() {
     let mountpoint = match &config.mountpoint {
         Some(m) => m.clone(),
         None => {
-            eprintln!("fuse-overlayfs: no mountpoint specified");
+            error!("no mountpoint specified");
             std::process::exit(1);
         }
     };
 
     if config.redirect_dir.as_deref().is_some_and(|r| r != "off") {
-        eprintln!("fuse-overlayfs: fuse-overlayfs only supports redirect_dir=off");
+        error!("fuse-overlayfs only supports redirect_dir=off");
         std::process::exit(1);
     }
 
@@ -79,7 +91,7 @@ fn main() {
         match sys::openat2::open_trusted(wd, libc::O_DIRECTORY, 0) {
             Ok(fd) => fd,
             Err(e) => {
-                eprintln!("fuse-overlayfs: cannot open workdir {}: {}", wd, e);
+                error!("cannot open workdir {}: {}", wd, e);
                 std::process::exit(1);
             }
         }
@@ -95,26 +107,26 @@ fn main() {
     ) {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("fuse-overlayfs: {}", e);
+            error!("{}", e);
             std::process::exit(1);
         }
     };
 
     if config.debug {
-        eprintln!("uid={}", config.uid_str.as_deref().unwrap_or("unchanged"));
-        eprintln!("gid={}", config.gid_str.as_deref().unwrap_or("unchanged"));
-        eprintln!(
+        debug!("uid={}", config.uid_str.as_deref().unwrap_or("unchanged"));
+        debug!("gid={}", config.gid_str.as_deref().unwrap_or("unchanged"));
+        debug!(
             "upperdir={}",
             config.upperdir.as_deref().unwrap_or("NOT USED")
         );
-        eprintln!(
+        debug!(
             "workdir={}",
             config.workdir.as_deref().unwrap_or("NOT USED")
         );
-        eprintln!("lowerdir={}", &lowerdir);
-        eprintln!("mountpoint={}", &mountpoint);
-        eprintln!("plugins={}", config.plugins.as_deref().unwrap_or("<none>"));
-        eprintln!(
+        debug!("lowerdir={}", &lowerdir);
+        debug!("mountpoint={}", &mountpoint);
+        debug!("plugins={}", config.plugins.as_deref().unwrap_or("<none>"));
+        debug!(
             "fsync={}",
             if config.fsync { "enabled" } else { "disabled" }
         );
@@ -177,7 +189,7 @@ fn main() {
     let session = match fuser::Session::new(fs, std::path::Path::new(&mountpoint), &fuse_config) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("fuse-overlayfs: mount failed: {}", e);
+            error!("mount failed: {}", e);
             std::process::exit(1);
         }
     };
@@ -197,13 +209,13 @@ fn main() {
     let bg = match session.spawn() {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("fuse-overlayfs: session error: {}", e);
+            error!("session error: {}", e);
             std::process::exit(1);
         }
     };
 
     if let Err(e) = bg.join() {
-        eprintln!("fuse-overlayfs: session error: {}", e);
+        error!("session error: {}", e);
         std::process::exit(1);
     }
 }
@@ -219,7 +231,7 @@ fn set_limits() {
                 maximum: Some(hard),
             },
         ) {
-            eprintln!("fuse-overlayfs: cannot set nofile rlimit: {}", e);
+            warn!("cannot set nofile rlimit: {}", e);
         }
     }
 }
@@ -248,7 +260,7 @@ fn setup_sigusr1() {
     let mut signals = match Signals::new([SIGUSR1]) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("fuse-overlayfs: cannot register SIGUSR1 handler: {}", e);
+            warn!("cannot register SIGUSR1 handler: {}", e);
             return;
         }
     };
@@ -274,15 +286,15 @@ fn check_writeable_proc() {
     let sfs = match sys::fs::statfs(&c_proc) {
         Ok(s) => s,
         Err(_) => {
-            eprintln!("fuse-overlayfs: error stating /proc");
+            warn!("error stating /proc");
             return;
         }
     };
 
     const PROC_SUPER_MAGIC: i64 = 0x9fa0;
     if sfs.f_type as i64 != PROC_SUPER_MAGIC {
-        eprintln!(
-            "fuse-overlayfs: invalid file system type found on /proc: {}, expected {}",
+        warn!(
+            "invalid file system type found on /proc: {}, expected {}",
             sfs.f_type, PROC_SUPER_MAGIC
         );
         return;
@@ -291,8 +303,6 @@ fn check_writeable_proc() {
     if let Ok(stvfs) = sys::fs::statvfs(&c_proc)
         && (stvfs.f_flag & libc::ST_RDONLY) != 0
     {
-        eprintln!(
-            "fuse-overlayfs: /proc seems to be mounted as readonly, it can lead to unexpected failures"
-        );
+        warn!("/proc seems to be mounted as readonly, it can lead to unexpected failures");
     }
 }
