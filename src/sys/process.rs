@@ -3,6 +3,8 @@
 // Safe wrappers for process-related syscalls.
 // All unsafe libc FFI calls are contained here.
 
+use log::error;
+
 /// Daemonize the process: fork, setsid, redirect stdio to /dev/null.
 /// Parent exits with status 0, child continues.
 pub fn daemonize() {
@@ -11,7 +13,7 @@ pub fn daemonize() {
     unsafe {
         let pid = libc::fork();
         if pid < 0 {
-            eprintln!("fuse-overlayfs: fork failed");
+            error!("fork failed");
             std::process::exit(1);
         }
         if pid > 0 {
@@ -21,7 +23,7 @@ pub fn daemonize() {
 
         // Child: new session
         if libc::setsid() < 0 {
-            eprintln!("fuse-overlayfs: setsid failed");
+            error!("setsid failed");
             std::process::exit(1);
         }
 
@@ -32,7 +34,7 @@ pub fn daemonize() {
                 || libc::dup2(devnull, 1) < 0
                 || libc::dup2(devnull, 2) < 0
             {
-                eprintln!("fuse-overlayfs: dup2 failed");
+                error!("dup2 failed");
                 std::process::exit(1);
             }
             if devnull > 2 {

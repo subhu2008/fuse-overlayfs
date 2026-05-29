@@ -3,6 +3,7 @@
 // CLI option parsing. Replicates the exact -o key=value syntax from the C version.
 
 use crate::mapping::{self, IdMapping};
+use log::warn;
 
 /// All configuration parsed from the command line.
 #[derive(Debug)]
@@ -178,7 +179,7 @@ pub fn parse_args(args: &[String]) -> Result<OverlayConfig, String> {
         }
 
         if arg.starts_with('-') {
-            eprintln!("unknown argument ignored: {}", arg);
+            warn!("unknown argument ignored: {}", arg);
             i += 1;
             continue;
         }
@@ -345,7 +346,7 @@ fn parse_single_option(opt: &str, config: &mut OverlayConfig) -> Result<(), Stri
                 if FUSE_PASSTHROUGH_OPTS.contains(&key) {
                     config.fuse_options.push(opt.to_string());
                 } else {
-                    eprintln!("unknown argument ignored: {}", opt);
+                    warn!("unknown argument ignored: {}", opt);
                 }
             }
         }
@@ -368,7 +369,7 @@ fn parse_single_option(opt: &str, config: &mut OverlayConfig) -> Result<(), Stri
             if FUSE_PASSTHROUGH_OPTS.contains(&opt) {
                 config.fuse_options.push(opt.to_string());
             } else {
-                eprintln!("unknown argument ignored: {}", opt);
+                warn!("unknown argument ignored: {}", opt);
             }
         }
     }

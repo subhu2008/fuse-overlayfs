@@ -8,6 +8,7 @@ use crate::error::{FsError, FsResult};
 use crate::sys::handle;
 use crate::sys::openat2::{self, SafeFd};
 use crate::sys::xattr as sxattr;
+use log::warn;
 use std::ffi::CString;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 
@@ -63,7 +64,7 @@ impl DataSource for DirectAccess {
         let resolved = match crate::sys::fs::realpath(&c_path) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("cannot resolve path {}", path);
+                warn!("cannot resolve path {}", path);
                 return Err(e);
             }
         };

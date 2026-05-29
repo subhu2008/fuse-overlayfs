@@ -3,6 +3,7 @@
 // Layer management: represents a single overlay layer (lower or upper).
 
 use crate::datasource::{DataSource, StatOverrideMode};
+use log::warn;
 use std::os::fd::RawFd;
 
 /// A single overlay layer.
@@ -73,7 +74,7 @@ pub fn init_layers(
     for dir in &dirs {
         let plugin = config::parse_plugin_path(dir);
         if plugin.is_some() {
-            eprintln!("plugin layers not yet implemented: {}", dir);
+            warn!("plugin layers not yet implemented: {}", dir);
             continue;
         }
 
